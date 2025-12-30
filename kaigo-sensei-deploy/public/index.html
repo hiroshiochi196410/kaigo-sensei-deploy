@@ -1,0 +1,406 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Kaigo Sensei V4 - AI Powered Learning</title>
+    <script crossorigin src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
+    <script crossorigin src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
+    <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Noto+Sans+JP:wght@400;700&family=Noto+Sans:wght@400;600;700&display=swap');
+        
+        body {
+            font-family: 'Noto Sans', 'Noto Sans JP', sans-serif;
+        }
+
+        .animate-bounce {
+            animation: bounce 1s infinite;
+        }
+
+        @keyframes bounce {
+            0%, 100% { transform: translateY(0); }
+            50% { transform: translateY(-10px); }
+        }
+
+        .scene-card {
+            transition: all 0.3s ease;
+        }
+
+        .scene-card:hover {
+            transform: translateY(-4px);
+            box-shadow: 0 10px 20px rgba(0,0,0,0.1);
+        }
+
+        .scene-card.active {
+            border: 3px solid #4f46e5;
+            box-shadow: 0 0 20px rgba(79, 70, 229, 0.3);
+        }
+    </style>
+</head>
+<body>
+    <div id="root"></div>
+
+    <script type="text/babel">
+        const { useState } = React;
+        
+        // アイコンコンポーネント（省略版）
+        const Icons = {
+            Volume2: (props) => <svg {...props} width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"></polygon><path d="M15.54 8.46a5 5 0 0 1 0 7.07"></path></svg>,
+            Mic: (props) => <svg {...props} width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z"></path><path d="M19 10v2a7 7 0 0 1-14 0v-2"></path><line x1="12" y1="19" x2="12" y2="23"></line></svg>,
+            Send: (props) => <svg {...props} width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><line x1="22" y1="2" x2="11" y2="13"></line><polygon points="22 2 15 22 11 13 2 9 22 2"></polygon></svg>,
+            Check: (props) => <svg {...props} width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><polyline points="20 6 9 17 4 12"></polyline></svg>,
+            AlertCircle: (props) => <svg {...props} width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><circle cx="12" cy="12" r="10"></circle><line x1="12" y1="8" x2="12" y2="12"></line><line x1="12" y1="16" x2="12.01" y2="16"></line></svg>,
+            Languages: (props) => <svg {...props} width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="m5 8 6 6"></path><path d="M2 5h12"></path><path d="m22 22-5-10-5 10"></path></svg>,
+            GraduationCap: (props) => <svg {...props} width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M22 10v6M2 10l10-5 10 5-10 5z"></path><path d="M6 12v5c3 3 9 3 12 0v-5"></path></svg>,
+            Users: (props) => <svg {...props} width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"></path><circle cx="9" cy="7" r="4"></circle><path d="M23 21v-2a4 4 0 0 0-3-3.87"></path><path d="M16 3.13a4 4 0 0 1 0 7.75"></path></svg>,
+            Sparkles: (props) => <svg {...props} width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="m12 3-1.912 5.813a2 2 0 0 1-1.275 1.275L3 12l5.813 1.912a2 2 0 0 1 1.275 1.275L12 21l1.912-5.813a2 2 0 0 1 1.275-1.275L21 12l-5.813-1.912a2 2 0 0 1-1.275-1.275L12 3Z"></path></svg>
+        };
+
+        const KaigoSenseiV4 = () => {
+            const [mode, setMode] = useState('translate');
+            const [scene, setScene] = useState('kaigo');
+            const [input, setInput] = useState('');
+            const [messages, setMessages] = useState([]);
+            const [isListening, setIsListening] = useState(false);
+            const [isLoading, setIsLoading] = useState(false);
+            const [showSceneSelector, setShowSceneSelector] = useState(false);
+            const [score, setScore] = useState({ correct: 0, total: 0 });
+
+            const scenes = {
+                kaigo: { name: "Perawatan Lansia", nameJP: "介護", icon: "🏥", color: "indigo" },
+                shopping: { name: "Belanja", nameJP: "買い物", icon: "🛒", color: "green" },
+                hospital: { name: "Rumah Sakit", nameJP: "病院", icon: "🏨", color: "red" },
+                daily: { name: "Sehari-hari", nameJP: "日常", icon: "☀️", color: "yellow" }
+            };
+
+            const detectLanguage = (text) => {
+                return /[\u3040-\u309F\u30A0-\u30FF\u4E00-\u9FAF]/.test(text) ? 'japanese' : 'indonesian';
+            };
+
+            const callClaudeAPI = async (prompt) => {
+                try {
+                    // バックエンドAPIを呼び出し（APIキーは不要）
+                    const response = await fetch('/api/chat', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ prompt: prompt })
+                    });
+
+                    if (!response.ok) {
+                        const errorData = await response.json();
+                        console.error('Backend API error:', errorData);
+                        alert('エラー: ' + (errorData.error || 'Unknown error'));
+                        return null;
+                    }
+
+                    const data = await response.json();
+                    const content = data.content[0].text;
+                    const jsonMatch = content.match(/\{[\s\S]*\}/);
+                    return jsonMatch ? JSON.parse(jsonMatch[0]) : null;
+                } catch (error) {
+                    console.error('API Error:', error);
+                    alert('通信エラーが発生しました: ' + error.message);
+                    return null;
+                }
+            };
+
+            const translateWithContext = async (text) => {
+                const selectedScene = scenes[scene];
+                return await callClaudeAPI(`Konteks: ${selectedScene.name}
+Terjemahkan "${text}" ke Bahasa Jepang yang sesuai konteks.
+Format JSON: {"japanese": "...", "pronunciation": "...", "indonesian": "${text}", "context": "...", "tips": "..."}`);
+            };
+
+            const checkJapanese = async (text) => {
+                const selectedScene = scenes[scene];
+                return await callClaudeAPI(`Konteks: ${selectedScene.name}
+Periksa "${text}" DALAM BAHASA INDONESIA.
+Format JSON: {"score": 0-100, "userInput": "${text}", "correctedJapanese": "...", "indonesianMeaning": "...", "pronunciation": "...", "feedback": "...", "tip": "...", "encouragement": "..."}`);
+            };
+
+            const generateSituation = async () => {
+                const selectedScene = scenes[scene];
+                const result = await callClaudeAPI(`Buat situasi roleplay untuk ${selectedScene.name}.
+Format JSON: {"situation": "...", "yourRole": "...", "aiRole": "...", "goal": "...", "firstMessage": "...", "firstMessageTranslation": "..."}`);
+                if (result) {
+                    setMessages([{ type: 'bot', mode: 'roleplay-start', content: result, timestamp: new Date() }]);
+                }
+            };
+
+            const getRoleplayResponse = async (text) => {
+                return await callClaudeAPI(`Roleplay. Siswa: "${text}"
+Respons sebagai AI dalam bahasa Jepang.
+Format JSON: {"aiResponseJapanese": "...", "aiResponseIndonesian": "...", "pronunciation": "...", "studentEvaluation": "...", "suggestions": "..."}`);
+            };
+
+            const speakJapanese = (text) => {
+                if ('speechSynthesis' in window) {
+                    const utterance = new SpeechSynthesisUtterance(text);
+                    utterance.lang = 'ja-JP';
+                    utterance.rate = 0.8;
+                    window.speechSynthesis.speak(utterance);
+                }
+            };
+
+            const startListening = () => {
+                if ('webkitSpeechRecognition' in window || 'SpeechRecognition' in window) {
+                    const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+                    const recognition = new SpeechRecognition();
+                    recognition.lang = mode === 'translate' ? 'id-ID' : 'ja-JP';
+                    recognition.continuous = false;
+                    recognition.onstart = () => setIsListening(true);
+                    recognition.onresult = (event) => {
+                        setInput(event.results[0][0].transcript);
+                        setIsListening(false);
+                    };
+                    recognition.onerror = () => setIsListening(false);
+                    recognition.onend = () => setIsListening(false);
+                    recognition.start();
+                } else {
+                    alert('Browser tidak mendukung speech recognition');
+                }
+            };
+
+            const handleSend = async () => {
+                if (!input.trim()) return;
+
+                const userMessage = { type: 'user', content: input, timestamp: new Date() };
+                setMessages(prev => [...prev, userMessage]);
+                setIsLoading(true);
+
+                const detectedLang = detectLanguage(input);
+
+                try {
+                    if (mode === 'roleplay') {
+                        if (detectedLang === 'japanese') {
+                            const result = await getRoleplayResponse(input);
+                            if (result) {
+                                setMessages(prev => [...prev, { type: 'bot', mode: 'roleplay', content: result, timestamp: new Date() }]);
+                            }
+                        } else {
+                            setMessages(prev => [...prev, { type: 'bot', mode: 'warning', content: { message: "Gunakan Bahasa Jepang!", tip: "Mode roleplay membutuhkan bahasa Jepang." }, timestamp: new Date() }]);
+                        }
+                    } else if (mode === 'practice') {
+                        if (detectedLang === 'japanese') {
+                            const result = await checkJapanese(input);
+                            if (result) {
+                                setMessages(prev => [...prev, { type: 'bot', mode: 'practice', content: result, timestamp: new Date() }]);
+                                setScore(prev => result.score >= 80 ? { correct: prev.correct + 1, total: prev.total + 1 } : { ...prev, total: prev.total + 1 });
+                            }
+                        } else {
+                            setMessages(prev => [...prev, { type: 'bot', mode: 'warning', content: { message: "Gunakan Bahasa Jepang!", tip: "Mode latihan untuk berlatih bahasa Jepang." }, timestamp: new Date() }]);
+                        }
+                    } else {
+                        if (detectedLang === 'indonesian') {
+                            const result = await translateWithContext(input);
+                            if (result) {
+                                setMessages(prev => [...prev, { type: 'bot', mode: 'translate', content: result, timestamp: new Date() }]);
+                            }
+                        } else {
+                            setMessages(prev => [...prev, { type: 'bot', mode: 'warning', content: { message: "Gunakan Bahasa Indonesia!", tip: "Mode terjemah untuk terjemahan Indonesia ke Jepang." }, timestamp: new Date() }]);
+                        }
+                    }
+                } catch (error) {
+                    console.error('Error:', error);
+                }
+
+                setInput('');
+                setIsLoading(false);
+            };
+
+            const handleModeChange = (newMode) => {
+                setMode(newMode);
+                setMessages([]);
+                if (newMode === 'roleplay') generateSituation();
+            };
+
+            const getModeColor = () => mode === 'translate' ? 'indigo' : mode === 'practice' ? 'green' : 'purple';
+            const currentColor = getModeColor();
+
+            return (
+                <div className="min-h-screen bg-gradient-to-br from-blue-50 to-indigo-100">
+                    <div className={`bg-${currentColor}-600 text-white p-6 shadow-lg`}>
+                        <div className="max-w-6xl mx-auto">
+                            <div className="flex items-center justify-between mb-4">
+                                <div>
+                                    <h1 className="text-3xl font-bold flex items-center gap-2">
+                                        <Icons.Sparkles className="w-8 h-8" />
+                                        Kaigo Sensei V4
+                                    </h1>
+                                    <p className="text-white/90 mt-1">🤖 AI-Powered Learning • {scenes[scene].icon} {scenes[scene].name}</p>
+                                </div>
+                                <button onClick={() => setShowSceneSelector(true)} className="bg-white/20 hover:bg-white/30 px-4 py-2 rounded-lg">
+                                    Ganti Situasi
+                                </button>
+                            </div>
+
+                            <div className="flex gap-3 flex-wrap">
+                                {['translate', 'practice', 'roleplay'].map(m => (
+                                    <button key={m} onClick={() => handleModeChange(m)} className={`px-6 py-2 rounded-full transition ${mode === m ? 'bg-white text-gray-900 font-semibold' : 'bg-white/20 hover:bg-white/30'}`}>
+                                        {m === 'translate' && <>📖 Terjemah</>}
+                                        {m === 'practice' && <>🎓 Latihan</>}
+                                        {m === 'roleplay' && <>🎭 Roleplay AI</>}
+                                    </button>
+                                ))}
+                            </div>
+
+                            {mode === 'practice' && score.total > 0 && (
+                                <div className="mt-3 bg-white/10 backdrop-blur-sm rounded-full px-4 py-2 inline-block">
+                                    <span className="text-sm font-medium">⭐ Skor: {score.correct}/{score.total} ({Math.round(score.correct/score.total*100)}%)</span>
+                                </div>
+                            )}
+                        </div>
+                    </div>
+
+                    {showSceneSelector && (
+                        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
+                            <div className="bg-white rounded-2xl p-6 max-w-4xl w-full">
+                                <h2 className="text-2xl font-bold mb-4">Pilih Situasi Belajar</h2>
+                                <div className="grid md:grid-cols-2 gap-4">
+                                    {Object.entries(scenes).map(([key, s]) => (
+                                        <div key={key} onClick={() => { setScene(key); setShowSceneSelector(false); setMessages([]); }} className={`scene-card cursor-pointer p-6 border-2 rounded-xl ${scene === key ? 'active' : 'border-gray-200'}`}>
+                                            <div className="text-4xl mb-3">{s.icon}</div>
+                                            <h3 className="text-xl font-bold">{s.name}</h3>
+                                            <p className="text-sm text-gray-600">{s.nameJP}</p>
+                                        </div>
+                                    ))}
+                                </div>
+                                <button onClick={() => setShowSceneSelector(false)} className="mt-4 w-full bg-gray-200 hover:bg-gray-300 py-2 rounded-lg">Tutup</button>
+                            </div>
+                        </div>
+                    )}
+
+                    <div className="max-w-4xl mx-auto p-4">
+                        <div className="bg-white rounded-lg shadow-md p-6 mb-4 min-h-[400px] max-h-[600px] overflow-y-auto">
+                            {messages.length === 0 ? (
+                                <div className="text-center text-gray-400 mt-20">
+                                    <p className="text-lg">{mode === 'translate' ? '📝 Ketik dalam Bahasa Indonesia' : mode === 'practice' ? '🗣️ Coba ucapkan dalam Bahasa Jepang!' : '🎭 Memulai roleplay...'}</p>
+                                </div>
+                            ) : (
+                                <div className="space-y-4">
+                                    {messages.map((msg, idx) => (
+                                        <div key={idx} className={msg.type === 'user' ? 'text-right' : 'text-left'}>
+                                            {msg.type === 'user' ? (
+                                                <div className={`inline-block bg-${currentColor}-600 text-white rounded-lg px-4 py-2 max-w-md`}>{msg.content}</div>
+                                            ) : msg.mode === 'roleplay-start' ? (
+                                                <div className="bg-purple-50 border-2 border-purple-400 rounded-lg p-4">
+                                                    <h4 className="font-bold text-purple-900 mb-2">🎭 Situasi Roleplay</h4>
+                                                    <p className="text-sm mb-1"><strong>Situasi:</strong> {msg.content.situation}</p>
+                                                    <p className="text-sm mb-1"><strong>Peran Anda:</strong> {msg.content.yourRole}</p>
+                                                    <p className="text-sm mb-1"><strong>Peran AI:</strong> {msg.content.aiRole}</p>
+                                                    <p className="text-sm mb-2"><strong>Tujuan:</strong> {msg.content.goal}</p>
+                                                    <div className="bg-white p-3 rounded border-l-4 border-purple-600">
+                                                        <div className="flex items-center gap-2">
+                                                            <span className="text-xl font-bold">{msg.content.firstMessage}</span>
+                                                            <button onClick={() => speakJapanese(msg.content.firstMessage)} className="p-1 hover:bg-gray-100 rounded-full">
+                                                                <Icons.Volume2 size={16} className="text-purple-600" />
+                                                            </button>
+                                                        </div>
+                                                        <p className="text-xs text-gray-600 mt-1">📝 {msg.content.firstMessageTranslation}</p>
+                                                    </div>
+                                                </div>
+                                            ) : msg.mode === 'roleplay' ? (
+                                                <div className="inline-block bg-gray-100 rounded-lg p-4 max-w-md">
+                                                    <div className="bg-purple-50 p-3 rounded mb-2">
+                                                        <div className="flex items-center gap-2">
+                                                            <span className="font-bold">{msg.content.aiResponseJapanese}</span>
+                                                            <button onClick={() => speakJapanese(msg.content.aiResponseJapanese)} className="p-1 hover:bg-purple-100 rounded-full">
+                                                                <Icons.Volume2 size={16} />
+                                                            </button>
+                                                        </div>
+                                                        <p className="text-xs text-gray-700 mt-1">📝 {msg.content.aiResponseIndonesian}</p>
+                                                    </div>
+                                                    {msg.content.studentEvaluation && (
+                                                        <div className="bg-blue-50 p-2 rounded text-xs mt-2">
+                                                            <strong>💬</strong> {msg.content.studentEvaluation}
+                                                        </div>
+                                                    )}
+                                                </div>
+                                            ) : msg.mode === 'translate' ? (
+                                                <div className="inline-block bg-gray-100 rounded-lg p-4 max-w-md">
+                                                    <div className="text-xs text-gray-600 mb-1">📝 {msg.content.indonesian}</div>
+                                                    <div className="text-xl font-bold flex items-center gap-2">
+                                                        {msg.content.japanese}
+                                                        <button onClick={() => speakJapanese(msg.content.japanese)} className="p-1 hover:bg-gray-200 rounded-full">
+                                                            <Icons.Volume2 size={16} />
+                                                        </button>
+                                                    </div>
+                                                    <div className="text-xs text-indigo-600 bg-indigo-50 px-2 py-1 rounded mt-1">🔊 {msg.content.pronunciation}</div>
+                                                    {msg.content.context && <div className="text-xs text-gray-600 mt-2">{msg.content.context}</div>}
+                                                </div>
+                                            ) : msg.mode === 'practice' ? (
+                                                <div className="inline-block bg-gray-100 rounded-lg p-4 max-w-md">
+                                                    <div className={`flex items-center gap-2 mb-2 p-2 rounded ${msg.content.score >= 80 ? 'bg-green-100' : 'bg-orange-100'}`}>
+                                                        {msg.content.score >= 80 ? <Icons.Check size={20} className="text-green-600" /> : <Icons.AlertCircle size={20} className="text-orange-600" />}
+                                                        <span className="font-bold text-sm">{msg.content.score >= 80 ? 'Bagus!' : 'Hampir!'} ({msg.content.score})</span>
+                                                    </div>
+                                                    {msg.content.userInput !== msg.content.correctedJapanese && (
+                                                        <div className="border-l-4 border-green-500 pl-2 bg-green-50 py-2 mb-2">
+                                                            <div className="text-xs text-gray-600">Yang benar:</div>
+                                                            <div className="font-bold text-green-700 flex items-center gap-1">
+                                                                {msg.content.correctedJapanese}
+                                                                <button onClick={() => speakJapanese(msg.content.correctedJapanese)} className="p-1 hover:bg-green-100 rounded-full">
+                                                                    <Icons.Volume2 size={14} />
+                                                                </button>
+                                                            </div>
+                                                        </div>
+                                                    )}
+                                                    <div className="bg-blue-50 p-2 rounded text-xs">
+                                                        <strong>💬</strong> {msg.content.feedback}
+                                                    </div>
+                                                </div>
+                                            ) : (
+                                                <div className="inline-block bg-yellow-100 border-2 border-yellow-400 rounded-lg p-3 max-w-md">
+                                                    <div className="flex items-start gap-2">
+                                                        <Icons.AlertCircle className="text-yellow-600" size={18} />
+                                                        <div>
+                                                            <p className="text-xs font-semibold text-yellow-900">{msg.content.message}</p>
+                                                            <p className="text-xs text-yellow-800 mt-1">{msg.content.tip}</p>
+                                                        </div>
+                                                    </div>
+                                                </div>
+                                            )}
+                                        </div>
+                                    ))}
+                                    {isLoading && (
+                                        <div className="text-left">
+                                            <div className="inline-block bg-gray-100 rounded-lg p-3">
+                                                <div className="flex gap-2">
+                                                    {[0,1,2].map(i => <div key={i} className="w-2 h-2 bg-gray-400 rounded-full animate-bounce" style={{animationDelay: `${i*0.1}s`}}></div>)}
+                                                </div>
+                                            </div>
+                                        </div>
+                                    )}
+                                </div>
+                            )}
+                        </div>
+
+                        <div className="bg-white rounded-lg shadow-md p-4">
+                            <div className="flex gap-2">
+                                <input
+                                    type="text"
+                                    value={input}
+                                    onChange={(e) => setInput(e.target.value)}
+                                    onKeyPress={(e) => e.key === 'Enter' && handleSend()}
+                                    placeholder={mode === 'translate' ? "Bahasa Indonesia..." : "日本語..."}
+                                    className="flex-1 px-4 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                                />
+                                <button onClick={startListening} disabled={isListening} className={`px-4 py-3 rounded-lg ${isListening ? 'bg-red-500 text-white' : 'bg-indigo-100 text-indigo-600 hover:bg-indigo-200'}`}>
+                                    <Icons.Mic size={24} />
+                                </button>
+                                <button onClick={handleSend} disabled={isLoading || !input.trim()} className="px-6 py-3 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 disabled:opacity-50">
+                                    <Icons.Send size={24} />
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            );
+        };
+
+        ReactDOM.render(<KaigoSenseiV4 />, document.getElementById('root'));
+    </script>
+</body>
+</html>
